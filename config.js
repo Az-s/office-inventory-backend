@@ -9,6 +9,6 @@ module.exports = {
         host: 'localhost',
         user: 'user',
         password: 'test',
-        database: 'study',
+        database: 'office',
     } 
 };
