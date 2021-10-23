@@ -17,6 +17,7 @@ app.use('/places' , places);
 app.use('/items' , items);
 
 mysqlDb.connect().catch(e => console.log(e));
+
 app.listen(port, () => {
     console.log(`Server started on ${port} port!`);
 });
