@@ -1,8 +1,9 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
-const nanoid = require("nanoid");
+const { nanoid } = require('nanoid');
 const config = require('../config');
+const mysqlDb = require('../mysqlDb');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -13,87 +14,72 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({storage});
+const upload = multer({ storage });
 
-const createRouter = connection => {
-    const router = express.Router();
+const router = express.Router();
 
-    router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
+    const [items] = await mysqlDb.getConnection().query('SELECT * FROM ??', ['items']);
+    res.send(items);
+});
 
-            connection.query('SELECT * FROM `Items`', (error, results) => {
-                if (error) {
-                    res.status(500).send({error: 'Database error'});
-                }
-                res.send(results);
-            });
+router.get('/:id', async (req, res) => {
+    const [items] = await mysqlDb.getConnection().query(
+        `SELECT * FROM ?? where id = ?`,
+        ['items', req.params.id])
+    if (!items) {
+        return res.status(404).send({ error: 'items not found' });
+    }
+
+    res.send(items[0]);
+});
+
+router.post('/', upload.single('image'), async (req, res) => {
+    if (!req.body.title || !req.body.description) {
+        return res.status(400).send({ error: 'Data not valid' });
+    }
+
+    const items = {
+        title: req.body.title,
+        description: req.body.description,
+    };
+
+    if (req.file) {
+        items.image = req.file.filename;
+    }
+
+    const newItems = await mysqlDb.getConnection().query(
+        'INSERT INTO ?? (title, description , time ,image) values (?, ? , ? , ?)',
+        ['places', items.title, items.description, items.time  ,items.image]
+    );
+
+    res.send({
+        ...items,
+        id: newItems[0].insertId
     });
+});
 
-    router.get('/:id', (req, res) => {
-        connection.query('SELECT * FROM `Items` WHERE `id` = ?', req.params.id, (error, results) => {
-            if (error) {
-                res.status(500).send({error: 'Database error'});
-            }
-            if (results[0]) {
-                res.send(results[0]);
-            } else {
-                res.status(404).send({error: 'Item not found'})
-            }
-        });
-    });
+router.put('/:id', upload.single('image'), async (req, res) => {
+	const items = {
+		title: req.body.title,
+		description: req.body.description,
+	};
+	
+	if(req.file) items.image = req.file.filename;
+	
+	await mysqlDb.getConnection().query(
+		'UPDATE ?? SET ? where id = ?',
+		['items', {...items}, req.params.id]);
+	
+	res.send({message: `Update successful, id= ${req.params.id}`});
+});
 
-    router.post('/', upload.single('image'), (req, res) => {
-        console.log(req.body);
-        const item = req.body;
+router.delete('/:id', async (req, res) => {
+    const [items] = await mysqlDb.getConnection().query(
+        `DELETE * FROM ?? where id = ?`,
+        ['items', req.params.id])
 
-        if (req.file) {
-            item.image = req.file.filename;
-        }
+    res.send(items[0]);
+});
 
-        connection.query('INSERT INTO `Items` (`name`, `category_fk`, `place_fk`, `description`, `image`) VALUES (?, ?, ?, ?, ?)', [item.name, item.category, item.place, item.description, item.image], (error, results) => {
-            if (error) {
-                console.log(error);
-                res.status(500).send({error: 'Database error'});
-            } else {
-                res.send({message: 'New item added'});
-            }
-
-        });
-    });
-
-    router.put('/:id', upload.single('image'), (req, res) => {
-        const item = req.body;
-        item.id = req.params.id;
-
-        if (req.file) {
-            item.image = req.file.filename;
-        }
-        connection.query('UPDATE `Items` SET `name`= ?, `category_fk`= ?, `place_fk`= ?, `description`= ?, `image`= ? WHERE `id`= ?', [item.name, item.category, item.place, item.description, item.image, item.id], (error, results) => {
-            if (error) {
-                console.log(error);
-                res.status(500).send({error: 'Database error'});
-            } else {
-                res.send({message: `Item ${item.id} has changed`});
-            }
-
-        });
-    });
-
-    router.delete('/:id', (req, res) => {
-        const item = req.body;
-        item.id = req.params.id;
-
-        connection.query('DELETE FROM `Items` WHERE `id`= ?', item.id, (error, results) => {
-            if (error) {
-                console.log(error);
-                res.status(500).send({error: 'Database error'});
-            } else {
-                res.send({message: `Item ${item.id} deleted`});
-            }
-
-        });
-    });
-
-    return router;
-};
-
-module.exports = createRouter;
+module.exports = router;
